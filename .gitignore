@@ -222,3 +222,10 @@ benchmark/profile_output/
 artifacts/
 /eval/
 data/
+
+# Ignorar pesos pesados y caches locales
+artifacts/
+.venv/
+__pycache__/
+*.pt
+*.bin
