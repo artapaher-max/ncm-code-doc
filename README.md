@@ -74,10 +74,49 @@ Agrega la definición del servidor a la configuración de servidores MCP (`mcpSe
     - `context_or_code` (string): Código fuente o fragmento técnico de entrada.
   - Salida: Texto conciso en lenguaje natural con la descripción funcional del bloque.
 
-## Re-entrenamiento (Fine-Tuning)
+## Dataset y Entrenamiento (Fine-Tuning)
 
-El repositorio incluye el dataset `data_train.jsonl` (5,000 pares extraídos de CodeSearchNet).
+### Descarga y Preparación de Datos
+El repositorio ya incluye `data_train.jsonl` con 5,000 pares curados extraídos de `CodeSearchNet`. Si deseas regenerar o ampliar el dataset, puedes ejecutar:
 
+```bash
+pip install datasets
+```
+
+```python
+python -c "
+import json
+from datasets import load_dataset
+
+print('-> Descargando 5,000 muestras multi-lenguaje (Python, JS, Web)...')
+ds = load_dataset('code_search_net', 'all', split='train', streaming=True, trust_remote_code=True)
+
+count = 0
+TARGET_SAMPLES = 5000
+
+with open('data_train.jsonl', 'w', encoding='utf-8') as f:
+    for item in ds:
+        code = item.get('func_code_string', '').strip()
+        doc = item.get('func_documentation_string', '').strip()
+        
+        # Filtro estricto para encajar en la ventana de 512 tokens de código y 48 de resumen
+        if code and doc and len(code) < 900 and len(doc) < 350:
+            row = {
+                'prompt': code,
+                'target': doc
+            }
+            f.write(json.dumps(row, ensure_ascii=False) + '\n')
+            count += 1
+            if count % 1000 == 0:
+                print(f'   -> {count} / {TARGET_SAMPLES} procesadas...')
+            if count >= TARGET_SAMPLES:
+                break
+
+print(f'-> Completado: {count} muestras guardadas en data_train.jsonl.')
+"
+```
+
+### Ejecución del Entrenamiento
 Para entrenar o adaptar el modelo con nuevos datos:
 ```bash
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python finetune_ncm.py
@@ -102,6 +141,19 @@ ncm-code-doc/
 ├── config/               # Configuraciones Hydra / PyTorch
 └── artifacts/            # Checkpoints locales (ignorado en Git)
 ```
+
+## Especificaciones de Hardware Utilizado
+
+Este proyecto fue entrenado, evaluado y desplegado sobre hardware de consumo doméstico, demostrando la viabilidad de adaptar y ejecutar arquitecturas no autorregresivas (NAR) sin infraestructura empresarial de cómputo en la nube:
+
+| Componente | Especificación / Valor de Referencia |
+| :--- | :--- |
+| **GPU** | NVIDIA GeForce RTX 2060 (6 GB VRAM GDDR6) |
+| **Consumo VRAM en Entrenamiento** | ~2.9 GB VRAM (FP16 AMP, Batch Size 1, Grad Accum 4) |
+| **Consumo VRAM en Inferencia** | ~2.5 GB VRAM |
+| **Latencia de Inferencia** | ~50–100 ms por bloque de código (NAR) |
+| **Sistema Operativo** | Linux (x86_64) |
+| **Entorno Python** | Python 3.12 / PyTorch 2.2+ (CUDA 12.x) |
 
 ## Referencias y Créditos
 
